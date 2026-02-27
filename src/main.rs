@@ -1,49 +1,88 @@
 use pixels::{Pixels, SurfaceTexture};
-use winit::{
-    dpi::LogicalSize,
-    event::{Event, WindowEvent},
-    event_loop::{ControlFlow, EventLoop},
-    window::WindowBuilder,
-};
-
+use std::sync::Arc;
 use std::time::Instant;
+use winit::{
+    application::ApplicationHandler,
+    dpi::LogicalSize,
+    event::WindowEvent,
+    event_loop::{ActiveEventLoop, EventLoop},
+    window::{Window, WindowId},
+};
 
 use gui::{Camera, Canvas, Color, Mesh, Vec3};
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 480;
-fn main() {
-    let event_loop = EventLoop::new();
 
-    let window = WindowBuilder::new()
-        .with_title("Rust GUI")
-        .with_inner_size(LogicalSize::new(WIDTH, HEIGHT))
-        .build(&event_loop)
-        .unwrap();
+struct App {
+    window: Option<Arc<Window>>,
+    pixels: Option<Pixels<'static>>,
+    start_time: Instant,
+}
 
-    let surface_texture = SurfaceTexture::new(WIDTH, HEIGHT, &window);
+impl App {
+    fn new() -> Self {
+        Self {
+            window: None,
+            pixels: None,
+            start_time: Instant::now(),
+        }
+    }
+}
 
-    let mut pixels = Pixels::new(WIDTH, HEIGHT, surface_texture).expect("Failed to create pixels");
+impl ApplicationHandler for App {
+    fn resumed(&mut self, event_loop: &ActiveEventLoop) {
+        if self.window.is_some() {
+            return;
+        }
 
-    let start_time = Instant::now();
+        let size = LogicalSize::new(WIDTH as f64, HEIGHT as f64);
+        let window = Arc::new(
+            event_loop
+                .create_window(
+                    Window::default_attributes()
+                        .with_title("Rust GUI")
+                        .with_inner_size(size),
+                )
+                .expect("Failed to create window"),
+        );
 
-    event_loop.run(move |event, _, control_flow| {
-        *control_flow = ControlFlow::Poll;
+        let window_size = window.inner_size();
+        let surface_texture =
+            SurfaceTexture::new(window_size.width, window_size.height, window.clone());
+        let pixels =
+            Pixels::new(WIDTH, HEIGHT, surface_texture).expect("Failed to create pixels");
+
+        self.start_time = Instant::now();
+        self.window = Some(window);
+        self.pixels = Some(pixels);
+    }
+
+    fn window_event(
+        &mut self,
+        event_loop: &ActiveEventLoop,
+        window_id: WindowId,
+        event: WindowEvent,
+    ) {
+        let Some(window) = &self.window else {
+            return;
+        };
+
+        if window.id() != window_id {
+            return;
+        }
 
         match event {
-            Event::WindowEvent { event, .. } => match event {
-                WindowEvent::CloseRequested => {
-                    *control_flow = ControlFlow::Exit;
-                }
-                _ => {}
-            },
-
-            Event::RedrawRequested(_) => {
-                // update(&mut app);
-                // draw(pixels.frame_mut(), &app);
+            WindowEvent::CloseRequested => {
+                event_loop.exit();
+            }
+            WindowEvent::RedrawRequested => {
+                let Some(pixels) = self.pixels.as_mut() else {
+                    return;
+                };
 
                 let frame = pixels.frame_mut();
-                let elapsed = start_time.elapsed().as_secs_f32();
+                let elapsed = self.start_time.elapsed().as_secs_f32();
 
                 for pixel in frame.chunks_exact_mut(4) {
                     pixel[0] = 0; //R
@@ -62,9 +101,11 @@ fn main() {
 
                 let angle = elapsed * 0.5;
 
-                let cube1_transform = |v: Vec3| v.rotate_x(angle).rotate_y(-angle).translate_x(-1.5);
+                let cube1_transform =
+                    |v: Vec3| v.rotate_x(angle).rotate_y(-angle).translate_x(-1.5);
                 let cube2_transform = |v: Vec3| v.rotate_y(-angle);
-                let cube3_transform = |v: Vec3| v.rotate_y(-angle).rotate_x(angle).translate_x(1.5);
+                let cube3_transform =
+                    |v: Vec3| v.rotate_y(-angle).rotate_x(angle).translate_x(1.5);
 
                 let speed = 0.3;
                 let amplitude = 2.0;
@@ -75,7 +116,8 @@ fn main() {
 
                 let y_offset = (tri01 * 2.0 - 1.0) * amplitude;
 
-                let sphere_transform = |v: Vec3| v.rotate_y(angle).translate_y(-2.0).translate_x(y_offset);
+                let sphere_transform =
+                    |v: Vec3| v.rotate_y(angle).translate_y(-2.0).translate_x(y_offset);
 
                 let base_hue = elapsed * 0.01;
                 let color = Color::from_hue(base_hue);
@@ -120,15 +162,25 @@ fn main() {
                 );
 
                 if pixels.render().is_err() {
-                    *control_flow = ControlFlow::Exit;
+                    event_loop.exit();
                 }
             }
-
-            Event::MainEventsCleared => {
-                window.request_redraw();
-            }
-
             _ => {}
         }
-    });
+    }
+
+    fn about_to_wait(&mut self, _event_loop: &ActiveEventLoop) {
+        if let Some(window) = &self.window {
+            window.request_redraw();
+        }
+    }
+}
+
+fn main() {
+    let event_loop = EventLoop::new().unwrap();
+    let mut app = App::new();
+
+    if let Err(err) = event_loop.run_app(&mut app) {
+        eprintln!("Event loop error: {err}");
+    }
 }
