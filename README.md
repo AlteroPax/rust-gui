@@ -1,7 +1,7 @@
 ## Rust GUI Learning Project
 
 This repository is a **personal learning project** for experimenting with basic GUI and rendering concepts in Rust.  
-It currently uses the `winit` and `pixels` crates to open a window and draw animated 2D content, and is in a very early, exploratory stage.
+It currently uses the `winit` and `pixels` crates.
 
 ### Status
 
@@ -19,7 +19,7 @@ It currently uses the `winit` and `pixels` crates to open a window and draw anim
 Clone the repository and run the project with Cargo:
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/AlteroPax/rust-gui
 cd gui
 cargo run
 ```
