@@ -2,22 +2,22 @@ use pixels::{Pixels, SurfaceTexture};
 use std::sync::Arc;
 use std::time::Instant;
 use winit::{
-    application::ApplicationHandler,
-    dpi::LogicalSize,
-    event::WindowEvent,
-    event_loop::{ActiveEventLoop, EventLoop},
-    window::{Window, WindowId},
+    application::ApplicationHandler, dpi::LogicalSize, event::WindowEvent, event_loop::{ActiveEventLoop, EventLoop}, keyboard::PhysicalKey, window::{Window, WindowId}
 };
 
 use gui::{Camera, Canvas, Color, Mesh, Vec3};
 
-const WIDTH: u32 = 640;
-const HEIGHT: u32 = 480;
+const WIDTH: u32 = 1920;
+const HEIGHT: u32 = 1080;
 
 struct App {
     window: Option<Arc<Window>>,
     pixels: Option<Pixels<'static>>,
     start_time: Instant,
+    camera_position: Vec3,
+    camera_yaw: f32,
+    camera_pitch: f32,
+    keys_pressed: std::collections::HashSet<winit::keyboard::KeyCode>,
 }
 
 impl App {
@@ -26,6 +26,10 @@ impl App {
             window: None,
             pixels: None,
             start_time: Instant::now(),
+            camera_position: Vec3::new(0.0,0.0,-3.0),
+            camera_yaw: 0.0,
+            camera_pitch: 0.0,
+            keys_pressed: std::collections::HashSet::new(),
         }
     }
 }
@@ -76,6 +80,18 @@ impl ApplicationHandler for App {
             WindowEvent::CloseRequested => {
                 event_loop.exit();
             }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if let PhysicalKey::Code(key_code) = event.physical_key {
+                    match event.state {
+                        winit::event::ElementState::Pressed => {
+                            self.keys_pressed.insert(key_code);
+                        }
+                        winit::event::ElementState::Released => {
+                            self.keys_pressed.remove(&key_code);
+                        }
+                    }
+                }
+            }
             WindowEvent::RedrawRequested => {
                 let Some(pixels) = self.pixels.as_mut() else {
                     return;
@@ -91,8 +107,10 @@ impl ApplicationHandler for App {
                     pixel[3] = 255; //A
                 }
 
-                let camera = Camera::new(-3.0, WIDTH, HEIGHT);
-                let mut canvas = Canvas::new(frame, WIDTH, HEIGHT);
+                println!("{:?}", self.keys_pressed);
+
+                let camera = Camera::new(self.camera_position, self.camera_yaw, self.camera_pitch, WIDTH, HEIGHT);
+                let mut canvas = Canvas::new(frame, WIDTH , HEIGHT);
 
                 let cube1 = Mesh::cube(0.5);
                 let cube2 = Mesh::cube(0.5);

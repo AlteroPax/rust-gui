@@ -14,6 +14,13 @@ pub struct Vec3 {
 }
 
 impl Vec3 {
+
+    pub fn new(x: f32, y: f32, z: f32) -> Self {
+        Vec3 {
+            x, y, z
+        }
+    }
+
     /// Returns this vector rotated around the Y axis by `angle` radians.
     pub fn rotate_y(self, angle: f32) -> Vec3 {
         Vec3 {
@@ -209,7 +216,8 @@ impl Mesh {
         F: Fn(Vec3) -> Vec3,
     {
         let verts_world: Vec<Vec3> = self.vertices.iter().map(|&v| transform(v)).collect();
-        let projected: Vec<(i32, i32)> = verts_world.iter().map(|&v| camera.project(v)).collect();
+        let verts_view: Vec<Vec3> = verts_world.iter().map(|&v| camera.world_to_view(v)).collect();
+        let projected: Vec<(i32, i32)> = verts_view.iter().map(|&v| camera.project_view(v)).collect();
 
         if draw_faces && !self.faces.is_empty() {
             struct FaceToDraw {
@@ -222,9 +230,9 @@ impl Mesh {
             for face in &self.faces {
                 let [i0, i1, i2, i3] = *face;
 
-                let v0 = verts_world[i0];
-                let v1 = verts_world[i1];
-                let v2 = verts_world[i3];
+                let v0 = verts_view[i0];
+                let v1 = verts_view[i1];
+                let v2 = verts_view[i3];
 
                 // Edge vectors in camera space
                 let e1 = Vec3 { x: v1.x - v0.x, y: v1.y - v0.y, z: v1.z - v0.z };
@@ -243,7 +251,7 @@ impl Mesh {
                 }
 
                 // Average depth for painter's algorithm
-                let depth = (v0.z + v1.z + v2.z + verts_world[i3].z) / 4.0;
+                let depth = (v0.z + v1.z + v2.z + verts_view[i3].z) / 4.0;
 
                 faces_to_draw.push(FaceToDraw {
                     indices: [i0, i1, i2, i3],
@@ -284,28 +292,43 @@ impl Mesh {
 
 /// Pinhole camera positioned on the Z axis looking toward +Z.
 pub struct Camera {
-    pub z: f32,
+    pub position: Vec3,
+    pub yaw: f32,
+    pub pitch: f32,
     pub width: u32,
     pub height: u32,
+
 }
 
 impl Camera {
     /// Creates a new camera at position `(0, 0, z)` with the given viewport size.
-    pub fn new(z: f32, width: u32, height: u32) -> Self {
-        Self { z, width, height }
+    pub fn new(position: Vec3, yaw: f32, pitch: f32, width: u32, height: u32, ) -> Self {
+        Self { position, yaw, pitch, width, height   }
     }
 
     /// Projects a 3D point into screen space using a simple perspective divide.
-    pub fn project(&self, v: Vec3) -> (i32, i32) {
-        let depth = v.z - self.z;
+    pub fn project(&self, world: Vec3) -> (i32, i32) {
+        self.project_view(self.world_to_view(world))
+    }
 
-        let projected_x = v.x / depth;
-        let projected_y = v.y / depth;
+    pub fn project_view(&self, view: Vec3) -> (i32, i32) {
+        let depth = view.z;
+        if depth <= 0.0 {
+            return (-1,-1);
+        }
+        let projected_x = view.x / depth;
+        let projected_y = view.y / depth;
 
         let screen_x = ((projected_x + 1.0) * 0.5 * self.width as f32) as i32;
-        let screen_y = ((1.0 - (projected_y + 1.0) * 0.5) * self.height as f32) as i32;
+        let screen_y = ((1.0 - (projected_y + 1.0) *0.5) * self.height as f32) as i32;
 
-        (screen_x, screen_y)
+        (screen_x, screen_y) 
+
+    }
+
+    pub fn world_to_view(&self, world: Vec3) -> Vec3 {
+        let translated =  Vec3::new(world.x - self.position.x, world.y - self.position.y, world.z - self.position.z);
+        return translated.rotate_x(-self.pitch).rotate_y(-self.yaw)
     }
 }
 
@@ -562,7 +585,7 @@ mod tests {
     fn camera_projects_center_point_to_screen_center() {
         let width = 640;
         let height = 480;
-        let camera = Camera::new(-3.0, width, height);
+        let camera = Camera::new(Vec3::new(0.0,0.0,-3.0), 0.0, 0.0, width, height);
         let v = Vec3 {
             x: 0.0,
             y: 0.0,
